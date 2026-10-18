@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Youflix">
+<title>Youflix</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{--fundo:#0a0a0a;--card:#1a1a1a;--vermelho:#e50914;--texto:#fff;--cinza:#999;--linha:#1f1f1f}
+  html,body{background:var(--fundo);color:var(--texto);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;overscroll-behavior:none}
+  body{opacity:0;transition:opacity .4s}
+  body.pronto{opacity:1}
+
+  /* ===== SPLASH ===== */
+  #splash{position:fixed;inset:0;background:#000;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .6s,visibility .6s}
+  #splash.oculto{opacity:0;visibility:hidden}
+  .splash-logo{font-size:64px;font-weight:900;letter-spacing:-3px;color:#fff;opacity:0;transform:scale(.7);animation:splashIn .9s cubic-bezier(.2,.9,.3,1.2) forwards}
+  .splash-logo span{color:var(--vermelho)}
+  .splash-sub{color:var(--vermelho);font-size:12px;letter-spacing:4px;margin-top:8px;opacity:0;animation:fadeIn .6s .5s forwards;text-transform:uppercase;font-weight:600}
+  .splash-hint{position:absolute;bottom:40px;color:#666;font-size:12px;opacity:0;animation:fadeIn .6s 1.2s forwards}
+  @keyframes splashIn{to{opacity:1;transform:scale(1)}}
+  @keyframes fadeIn{to{opacity:1}}
+
+  /* ===== HEADER ===== */
+  header{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:10px;padding:14px 16px;background:rgba(10,10,10,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--linha);padding-top:max(14px,env(safe-area-inset-top))}
+  .logo{font-size:24px;font-weight:800;letter-spacing:-1px;white-space:nowrap;cursor:pointer}
+  .logo span{color:var(--vermelho)}
+  #busca{flex:1;padding:10px 14px;border:1px solid #2a2a2a;background:#1a1a1a;color:#fff;border-radius:20px;font-size:15px;outline:none;min-width:0}
+  #busca::placeholder{color:#666}
+  #busca:focus{border-color:#444}
+  .btn-icon{background:#1a1a1a;border:1px solid #2a2a2a;color:#fff;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0}
+  .btn-icon:active{transform:scale(.94)}
+
+  /* ===== HERO ===== */
+  .hero{padding:40px 20px 30px;background:linear-gradient(135deg,#1a0a0a,#0a0a0a 60%);border-bottom:1px solid var(--linha)}
+  .hero h1{font-size:28px;margin-bottom:8px;line-height:1.2}
+  .hero h1 span{color:var(--vermelho)}
+  .hero p{color:var(--cinza);font-size:14px;margin-bottom:18px;line-height:1.4}
+  .btn{background:var(--vermelho);color:#fff;border:none;padding:12px 22px;border-radius:6px;font-weight:600;font-size:15px;cursor:pointer;transition:transform .1s}
+  .btn:active{transform:scale(.97)}
+
+  /* ===== FILEIRAS ===== */
+  main{padding:16px 0 100px}
+  .fileira{margin-bottom:22px}
+  .fileira h2{font-size:16px;margin:0 16px 10px;font-weight:600}
+  .fileira-scroll{display:flex;gap:10px;overflow-x:auto;padding:0 16px 6px;scroll-behavior:smooth;scrollbar-width:none}
+  .fileira-scroll::-webkit-scrollbar{display:none}
+
+  .card{flex:0 0 160px;background:var(--card);border-radius:8px;overflow:hidden;cursor:pointer;position:relative;transition:transform .1s}
+  .card:active{transform:scale(.97)}
+  .thumb-wrap{position:relative;aspect-ratio:16/9;background:#111}
+  .thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+  .thumb-wrap .ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#444;font-size:28px}
+  .progress{position:absolute;bottom:0;left:0;height:3px;background:var(--vermelho);border-radius:0 2px 0 0}
+  .badge-dur{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.8);padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600}
+  .card-info{padding:8px 10px}
+  .card-info h3{font-size:12px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:31px}
+  .card-info span{font-size:10px;color:var(--cinza)}
+  .btn-del{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.75);color:#fff;border:none;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:12px;z-index:2}
+
+  .vazio{text-align:center;padding:60px 24px;color:var(--cinza);font-size:14px;line-height:1.7}
+  .vazio b{color:#fff}
+
+  .fab{position:fixed;bottom:24px;right:20px;width:56px;height:56px;border-radius:50%;background:var(--vermelho);color:#fff;border:none;font-size:28px;box-shadow:0 6px 20px rgba(229,9,20,.45);z-index:90;cursor:pointer;display:flex;align-items:center;justify-content:center;bottom:max(24px,env(safe-area-inset-bottom))}
+  .fab:active{transform:scale(.9)}
+
+  /* ===== MODAIS ===== */
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:100;align-items:center;justify-content:center;padding:20px;padding-top:max(20px,env(safe-area-inset-top));padding-bottom:max(20px,env(safe-area-inset-bottom));overflow-y:auto}
+  .modal.aberto{display:flex}
+  .modal-box{background:#1a1a1a;border-radius:12px;padding:20px;width:100%;max-width:500px;position:relative;max-height:90vh;overflow-y:auto}
+  .fechar{position:absolute;top:10px;right:14px;background:none;border:none;color:#fff;font-size:26px;cursor:pointer;line-height:1;padding:4px;z-index:2}
+
+  .modal-player{padding:0;background:#000}
+  .modal-player.aberto{display:block}
+  .player-wrap{display:flex;flex-direction:column;height:100vh;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+  .player-header{display:flex;align-items:center;padding:12px 16px;gap:12px;background:#000;flex-shrink:0}
+  .player-header button{background:none;border:none;color:#fff;font-size:22px;cursor:pointer}
+  .modal-player video{width:100%;max-height:42vh;background:#000;flex-shrink:0}
+  .player-info{padding:16px 20px;overflow-y:auto;flex:1}
+
+  .player-info h3{font-size:18px;margin-bottom:6px;line-height:1.3}
+  .player-info .meta{color:var(--cinza);font-size:12px;margin-bottom:14px}
+
+  .channel-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid #222;border-bottom:1px solid #222;margin:12px 0}
+  .avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#e50914,#b00710);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex-shrink:0}
+  .channel-info{flex:1;min-width:0}
+  .channel-info strong{display:block;font-size:14px}
+  .channel-info span{font-size:12px;color:var(--cinza)}
+  .btn-sub{background:#fff;color:#000;border:none;padding:9px 16px;border-radius:20px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;transition:background .2s}
+  .btn-sub:active{transform:scale(.96)}
+  .btn-sub.inscrito{background:#333;color:#fff}
+
+  .actions-row{display:flex;gap:10px;margin:14px 0}
+  .btn-action{display:flex;align-items:center;gap:6px;background:#222;color:#fff;border:none;padding:10px 16px;border-radius:20px;font-size:14px;cursor:pointer;font-weight:500;transition:background .2s}
+  .btn-action:active{transform:scale(.96)}
+  .btn-action.ativo{background:var(--vermelho)}
+  .btn-action.static{cursor:default}
+
+  #playerDesc{color:#ccc;font-size:14px;line-height:1.5;margin-bottom:20px;white-space:pre-wrap}
+
+  .comments-section{border-top:1px solid #222;padding-top:16px;margin-top:4px}
+  .comments-section h4{font-size:15px;margin-bottom:12px}
+  .comment-input-row{display:flex;gap:8px;margin-bottom:18px}
+  .comment-input-row input{flex:1;background:#0a0a0a;color:#fff;border:1px solid #2a2a2a;border-radius:20px;padding:10px 14px;font-size:14px;outline:none;min-width:0}
+  .comment-input-row input:focus{border-color:#444}
+  .comment-input-row button{background:var(--vermelho);color:#fff;border:none;padding:10px 16px;border-radius:20px;font-weight:600;cursor:pointer;font-size:13px;flex-shrink:0}
+  .comment-input-row button:active{transform:scale(.96)}
+
+  .comentario{display:flex;gap:10px;margin-bottom:16px}
+  .coment-avatar{width:32px;height:32px;border-radius:50%;background:#333;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+  .coment-body{flex:1;min-width:0}
+  .coment-header{display:flex;gap:8px;align-items:baseline;margin-bottom:3px}
+  .coment-header strong{font-size:13px}
+  .coment-header span{font-size:11px;color:var(--cinza)}
+  .coment-body p{font-size:13px;line-height:1.4;color:#ddd;word-wrap:break-word}
+  .sem-coment{color:var(--cinza);font-size:13px;text-align:center;padding:16px 0}
+
+  form label{display:block;margin-bottom:14px;font-size:13px;color:#ccc}
+  form input[type=text],form textarea,form select{width:100%;margin-top:6px;padding:12px 14px;background:#0a0a0a;color:#fff;border:1px solid #2a2a2a;border-radius:8px;font-family:inherit;font-size:15px;outline:none}
+  form input[type=file]{width:100%;margin-top:6px;padding:12px;background:#0a0a0a;color:#fff;border:1px dashed #333;border-radius:8px;font-size:13px}
+  form button[type=submit]{width:100%;margin-top:8px;padding:14px;font-size:16px}
+  #uploadStatus{margin-top:12px;font-size:14px;text-align:center;color:#4ade80}
+  #uploadStatus.erro{color:#f87171}
+  .prog{margin-top:10px;height:6px;background:#2a2a2a;border-radius:3px;overflow:hidden;display:none}
+  .prog.ativo{display:block}
+  .prog-bar{height:100%;background:var(--vermelho);width:0%;transition:width .3s}
+
+  /* ===== TOAST ===== */
+  .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(30px);background:#1a1a1a;color:#fff;padding:12px 20px;border-radius:24px;font-size:13px;border:1px solid #333;opacity:0;transition:all .3s;z-index:200;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.5);max-width:90vw;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ===== CONFIG ===== */
+  .config-status{background:#0a0a0a;border:1px solid #2a2a2a;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;line-height:1.5}
+  .config-status.ok{border-color:#22c55e;color:#4ade80}
+  .config-status.warn{border-color:#f59e0b;color:#fbbf24}
+  .config-status code{background:#1a1a1a;padding:2px 6px;border-radius:4px;font-size:11px}
+  .config-tip{font-size:12px;color:var(--cinza);line-height:1.6;margin-bottom:16px}
+  .config-tip a{color:#60a5fa;text-decoration:none}
+  .config-tip ol{padding-left:18px;margin-top:8px}
+  .config-tip li{margin-bottom:6px}
+  #configArea{width:100%;min-height:120px;background:#0a0a0a;color:#fff;border:1px solid #2a2a2a;border-radius:8px;padding:12px;font-family:ui-monospace,monospace;font-size:12px;outline:none;resize:vertical}
+  .config-btns{display:flex;gap:8px;margin-top:12px}
+  .config-btns button{flex:1;padding:12px;border-radius:8px;border:none;font-weight:600;cursor:pointer;font-size:14px}
+  .config-btns .save{background:var(--vermelho);color:#fff}
+  .config-btns .clear{background:#333;color:#fff}
+</style>
+</head>
+<body>
+
+<!-- Splash -->
+<div id="splash">
+  <div class="splash-logo">You<span>flix</span></div>
+  <div class="splash-sub">Sua plataforma</div>
+  <div class="splash-hint">toque para ativar o som</div>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="logo" onclick="window.scrollTo({top:0,behavior:'smooth'})">You<span>flix</span></div>
+  <input type="text" id="busca" placeholder="Buscar...">
+  <button class="btn-icon" onclick="abrirConfig()" aria-label="Configurações">⚙️</button>
+</header>
+
+<!-- Hero -->
+<section class="hero" id="hero">
+  <h1>Bem-vindo à <span>Youflix</span></h1>
+  <p id="heroSub">Envie vídeos direto do celular. Tudo salvo no aparelho.</p>
+  <button class="btn" onclick="abrirUpload()">＋ Adicionar vídeo</button>
+</section>
+
+<!-- Fileiras -->
+<main id="main"></main>
+
+<button class="fab" onclick="abrirUpload()" aria-label="Upload">＋</button>
+
+<!-- Modal Upload -->
+<div class="modal" id="modalUpload">
+  <div class="modal-box">
+    <button class="fechar" onclick="fecharUpload()">✕</button>
+    <h2 style="margin-bottom:16px">📤 Enviar vídeo</h2>
+    <form id="formUpload">
+      <label>Título *<input type="text" name="titulo" required maxlength="80"></label>
+      <label>Descrição<textarea name="descricao" rows="2" maxlength="300"></textarea></label>
+      <label>Categoria
+        <select name="categoria">
+          <option>Geral</option>
+          <option>Ação</option>
+          <option>Comédia</option>
+          <option>Drama</option>
+          <option>Terror</option>
+          <option>Documentário</option>
+          <option>Anime</option>
+          <option>Vlog</option>
+          <option>Tutorial</option>
+          <option>Música</option>
+        </select>
+      </label>
+      <label>Vídeo *<input type="file" name="video" accept="video/*" required></label>
+      <button type="submit" class="btn">Salvar na Youflix</button>
+      <div class="prog" id="prog"><div class="prog-bar" id="progBar"></div></div>
+      <p id="uploadStatus"></p>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Player -->
+<div class="modal modal-player" id="modalPlayer">
+  <div class="player-wrap">
+    <div class="player-header">
+      <button onclick="fecharPlayer()">←</button>
+      <span style="color:#999;font-size:13px">Voltar</span>
+    </div>
+    <video id="playerVideo" controls playsinline preload="auto"></video>
+    <div class="player-info">
+      <h3 id="playerTitulo"></h3>
+      <div class="meta" id="playerMeta"></div>
+
+      <div class="channel-row">
+        <div class="avatar">Y</div>
+        <div class="channel-info">
+          <strong>Youflix</strong>
+          <span id="subCount">0 inscritos</span>
+        </div>
+        <button class="btn-sub" id="btnSub" onclick="toggleInscricao()">Inscrever-se</button>
+      </div>
+
+      <div class="actions-row">
+        <button class="btn-action" id="btnLike" onclick="toggleLike()">
+          <span id="likeIcon">👍</span> <span id="likeCount">0</span>
+        </button>
+        <div class="btn-action static">
+          💬 <span id="commentCount">0</span>
+        </div>
+      </div>
+
+      <p id="playerDesc"></p>
+
+      <div class="comments-section">
+        <h4>Comentários</h4>
+        <div class="comment-input-row">
+          <input type="text" id="commentInput" placeholder="Adicione um comentário..."
+                 autocomplete="off" enterkeyhint="send" maxlength="500">
+          <button onclick="adicionarComentario()">Enviar</button>
+        </div>
+        <div id="commentList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Config -->
+<div class="modal" id="modalConfig">
+  <div class="modal-box">
+    <button class="fechar" onclick="fecharConfig()">✕</button>
+    <h2 style="margin-bottom:16px">⚙️ Configurações</h2>
+
+    <div class="config-status" id="configStatus"></div>
+
+    <div class="config-tip">
+      <strong>🔥 Sincronização em nuvem (opcional)</strong>
+      <ol>
+        <li>Crie um projeto grátis em <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a></li>
+        <li>Ative o <b>Firestore</b> em modo de teste</li>
+        <li>Em <b>Configurações do projeto → Seus apps → Web</b>, copie o objeto <code>firebaseConfig</code></li>
+        <li>Cole abaixo e salve</li>
+      </ol>
+      <p style="margin-top:8px">Com isso, <b>curtidas, comentários e inscritos</b> ficam globais entre todos que acessam seu site. Sem isso, tudo funciona local no seu aparelho.</p>
+    </div>
+
+    <textarea id="configArea" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
+    <div class="config-btns">
+      <button class="save" onclick="salvarConfig()">💾 Salvar</button>
+      <button class="clear" onclick="limparConfig()">🗑 Limpar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<script>
+/* ========================================================
+   CONSTANTES
+   ======================================================== */
+const CATEGORIAS_PADRAO = ['Geral','Ação','Comédia','Drama','Terror','Documentário','Anime','Vlog','Tutorial','Música'];
+const LIMITE_MB = 500;
+
+/* ========================================================
+   INDEXEDDB
+   ======================================================== */
+function abrirDB(){return new Promise((res,rej)=>{const r=indexedDB.open('youflix',1);r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains('filmes'))db.createObjectStore('filmes',{keyPath:'id'})};r.onsuccess=e=>res(e.target.result);r.onerror=e=>rej(e.target.error)})}
+async function salvarFilme(f){const db=await abrirDB();return new Promise((res,rej)=>{const t=db.transaction('filmes','readwrite').objectStore('filmes').put(f);t.onsuccess=()=>res(t.result);t.onerror=()=>rej(t.error)})}
+async function listarFilmes(){const db=await abrirDB();return new Promise((res,rej)=>{const r=db.transaction('filmes','readonly').objectStore('filmes').getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function deletarFilme(id){const db=await abrirDB();return new Promise((res,rej)=>{const r=db.transaction('filmes','readwrite').objectStore('filmes').delete(id);r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
+
+/* ========================================================
+   ESTADO
+   ======================================================== */
+let filmes=[], urls=[], filmeAtual=null;
+let unsubLikes=null, unsubComents=null, unsubCanal=null;
+let db=null;
+let somAtivado=true;
+
+/* ========================================================
+   UTILITÁRIOS
+   ======================================================== */
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function fmtData(ts){return new Date(ts).toLocaleDateString('pt-BR')}
+function fmtDur(s){if(!s||isNaN(s))return '';s=Math.floor(s);const m=Math.floor(s/60),r=s%60;return `${m}:${String(r).padStart(2,'0')}`}
+function tempoRelativo(ts){const d=Date.now()-ts,min=Math.floor(d/60000);if(min<1)return'agora';if(min<60)return`há ${min} min`;const h=Math.floor(min/60);if(h<24)return`há ${h}h`;const dd=Math.floor(h/24);if(dd<7)return`há ${dd}d`;return new Date(ts).toLocaleDateString('pt-BR')}
+function limparUrls(){urls.forEach(u=>URL.revokeObjectURL(u));urls=[]}
+
+function toast(msg,dur=2500){
+  const el=document.createElement('div');el.className='toast';el.textContent=msg;document.body.appendChild(el);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('show')));
+  setTimeout(()=>{el.classList.remove('show');setTimeout(()=>el.remove(),300)},dur);
+}
+
+/* ========================================================
+   SOM — TA-DUM (sintetizado, sem arquivo)
+   ======================================================== */
+let somTocado=false;
+function tocarTaDum(){
+  if(!somAtivado||somTocado)return;
+  somTocado=true;
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const now=ctx.currentTime;
+    // "ta"
+    const o1=ctx.createOscillator(),g1=ctx.createGain();
+    o1.type='sine';o1.frequency.value=146.83;
+    g1.gain.setValueAtTime(.28,now);
+    g1.gain.exponentialRampToValueAtTime(.001,now+.35);
+    o1.connect(g1);g1.connect(ctx.destination);
+    o1.start(now);o1.stop(now+.35);
+    // "dum" — duas vozes
+    const o2=ctx.createOscillator(),g2=ctx.createGain();
+    o2.type='sine';o2.frequency.value=293.66;
+    g2.gain.setValueAtTime(.001,now+.3);
+    g2.gain.exponentialRampToValueAtTime(.28,now+.35);
+    g2.gain.exponentialRampToValueAtTime(.001,now+1.4);
+    o2.connect(g2);g2.connect(ctx.destination);
+    o2.start(now+.3);o2.stop(now+1.4);
+    // camada harmônica
+    const o3
