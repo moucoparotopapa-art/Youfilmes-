@@ -927,7 +927,14 @@ function tocarTaDum(){
 
     initFirebase();
     configurarInscritos();
-       await carregar();
+localStorage.setItem('youfilmes_fb', JSON.stringify({
+  apiKey: "AIzaSyAeelb1dPhKUCboflf6MHFuSX454xIBeHQ",
+  authDomain: "youfilmes.firebaseapp.com",
+  projectId: "youfilmes",
+  storageBucket: "youfilmes.firebasestorage.app",
+  messagingSenderId: "664419528744",
+  appId: "1:664419528744:web:48ebda31c932dcc468451d"
+}));       await carregar();
   }
 
   init();
@@ -935,11 +942,4 @@ function tocarTaDum(){
 </body>
 </html>
 
- /localStorage.setItem('youfilmes_fb', JSON.stringify({
-  apiKey: "AIzaSyAeelb1dPhKUCboflf6MHFuSX454xIBeHQ",
-  authDomain: "youfilmes.firebaseapp.com",
-  projectId: "youfilmes",
-  storageBucket: "youfilmes.firebasestorage.app",
-  messagingSenderId: "664419528744",
-  appId: "1:664419528744:web:48ebda31c932dcc468451d"
-}));
+ 
