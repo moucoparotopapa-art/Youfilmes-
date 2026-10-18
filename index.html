@@ -344,4 +344,588 @@ function tocarTaDum(){
     o2.connect(g2);g2.connect(ctx.destination);
     o2.start(now+.3);o2.stop(now+1.4);
     // camada harmônica
-    const o3
+          const o3=ctx.createOscillator(),g3=ctx.createGain();
+      o3.type='triangle';o3.frequency.value=440;
+      g3.gain.setValueAtTime(.001,now+.3);
+      g3.gain.exponentialRampToValueAtTime(.12,now+.4);
+      g3.gain.exponentialRampToValueAtTime(.001,now+1.2);
+      o3.connect(g3);g3.connect(ctx.destination);
+      o3.start(now+.3);o3.stop(now+1.2);
+    }catch(e){console.warn('Audio:',e)}
+  }
+
+  /* ========================================================
+     FIREBASE
+     ======================================================== */
+  function getConfig(){try{return JSON.parse(localStorage.getItem('youflix_fb')||'null')}catch{return null}}
+  function initFirebase(){
+    const cfg=getConfig();
+    if(!cfg||!cfg.apiKey||!cfg.projectId)return false;
+    try{
+      if(!firebase.apps.length)firebase.initializeApp(cfg);
+      db=firebase.firestore();
+      return true;
+    }catch(e){console.warn('Firebase:',e);db=null;return false}
+  }
+  function estaCloud(){return db!==null}
+
+  /* ========================================================
+     RENDER — FILEIRAS
+     ======================================================== */
+  function agruparPorCategoria(lista){
+    const map={};
+    lista.forEach(f=>{
+      const cat=f.categoria||'Geral';
+      if(!map[cat])map[cat]=[];
+      map[cat].push(f);
+    });
+    return map;
+  }
+
+  function filmeTemProgresso(f){
+    return f.progresso && f.progresso>5 && f.duracao && f.progresso < f.duracao-10;
+  }
+
+  function render(lista){
+    const main=document.getElementById('main');
+    limparUrls();
+    main.innerHTML='';
+
+    if(!lista.length){
+      main.innerHTML=`<div class="vazio">🎬 Nenhum vídeo ainda.<br>Toque no <b>＋</b> para enviar seu primeiro filme.</div>`;
+      return;
+    }
+
+    const continuar=lista.filter(filmeTemProgresso).sort((a,b)=>b.ultimoAcesso-a.ultimoAcesso);
+    if(continuar.length){
+      main.appendChild(criarFileira('▶ Continuar assistindo',continuar));
+    }
+
+    const recentes=lista.slice().sort((a,b)=>b.criadoEm-a.criadoEm);
+    main.appendChild(criarFileira('🆕 Adicionados recentemente',recentes));
+
+    const grupos=agruparPorCategoria(lista);
+    const cats=Object.keys(grupos).sort((a,b)=>{
+      if(a==='Geral')return 1;
+      if(b==='Geral')return -1;
+      return a.localeCompare(b,'pt-BR');
+    });
+    cats.forEach(cat=>{
+      main.appendChild(criarFileira(`🎬 ${cat}`,grupos[cat]));
+    });
+  }
+
+  function criarFileira(titulo,lista){
+    const wrap=document.createElement('div');wrap.className='fileira';
+    wrap.innerHTML=`<h2>${esc(titulo)}</h2><div class="fileira-scroll"></div>`;
+    const scroll=wrap.querySelector('.fileira-scroll');
+
+    lista.forEach(f=>{
+      const vUrl=URL.createObjectURL(f.videoBlob);urls.push(vUrl);
+      let tUrl=null;if(f.thumbBlob){tUrl=URL.createObjectURL(f.thumbBlob);urls.push(tUrl)}
+
+      const c=document.createElement('div');c.className='card';
+
+      let progHTML='',badge='';
+      if(filmeTemProgresso(f)){
+        const pct=Math.min(100,(f.progresso/f.duracao)*100);
+        progHTML=`<div class="progress" style="width:${pct}%"></div>`;
+      }
+      if(f.duracao)badge=`<div class="badge-dur">${fmtDur(f.duracao)}</div>`;
+
+      c.innerHTML=`
+        <div class="thumb-wrap">
+          ${tUrl?`<img src="${tUrl}" alt="">`:`<div class="ph">🎬</div>`}
+          ${progHTML}
+          ${badge}
+          <button class="btn-del" aria-label="Deletar">🗑</button>
+        </div>
+        <div class="card-info">
+          <h3>${esc(f.titulo)}</h3>
+          <span>${esc(f.categoria||'Geral')}</span>
+        </div>
+      `;
+
+      c.querySelector('.btn-del').onclick=async e=>{
+        e.stopPropagation();
+        if(confirm(`Deletar "${f.titulo}"?`)){
+          await deletarFilme(f.id);
+          if(db)db.collection('filmes').doc(f.id).delete().catch(()=>{});
+          await carregar();
+          toast('🗑 Vídeo deletado');
+        }
+      };
+      c.onclick=()=>abrirPlayer(f,vUrl);
+      scroll.appendChild(c);
+    });
+
+    return wrap;
+  }
+
+  /* ========================================================
+     BUSCA
+     ======================================================== */
+  document.getElementById('busca').addEventListener('input',e=>{
+    const t=e.target.value.toLowerCase().trim();
+    if(!t)return render(filmes);
+    render(filmes.filter(f=>f.titulo.toLowerCase().includes(t)||(f.descricao||'').toLowerCase().includes(t)||(f.categoria||'').toLowerCase().includes(t)));
+  });
+
+  /* ========================================================
+     PLAYER
+     ======================================================== */
+  function abrirPlayer(f,vUrl){
+    filmeAtual=f;
+    const v=document.getElementById('playerVideo');
+
+    v.src=vUrl;v.load();
+    if(filmeTemProgresso(f)){
+      v.addEventListener('loadedmetadata',()=>{v.currentTime=f.progresso},{once:true});
+    }
+
+    document.getElementById('playerTitulo').textContent=f.titulo;
+    document.getElementById('playerMeta').textContent=
+      `${f.categoria||'Geral'} • ${fmtData(f.criadoEm)}`;
+
+    document.getElementById('playerDesc').textContent=f.descricao||'Sem descrição.';
+    document.getElementById('commentInput').value='';
+    document.getElementById('modalPlayer').classList.add('aberto');
+
+    atualizarInscricaoUI();
+    atualizarLikeUI();
+
+    configurarComentarios();
+    configurarLikes();
+
+    setTimeout(()=>v.play().catch(()=>{}),100);
+  }
+
+  function fecharPlayer(){
+    const v=document.getElementById('playerVideo');
+    salvarProgresso();
+    v.pause();v.src='';
+
+    if(unsubLikes){unsubLikes();unsubLikes=null}
+    if(unsubComents){unsubComents();unsubComents=null}
+
+    document.getElementById('modalPlayer').classList.remove('aberto');
+    filmeAtual=null;
+  }
+
+  /* ========================================================
+     PROGRESSO — CONTINUAR ASSISTINDO
+     ======================================================== */
+  let ultimoSave=0;
+  const videoEl=document.getElementById('playerVideo');
+
+  videoEl.addEventListener('timeupdate',()=>{
+    if(!filmeAtual)return;
+    if(Date.now()-ultimoSave<5000)return;
+    ultimoSave=Date.now();
+    salvarProgresso();
+  });
+
+  videoEl.addEventListener('pause',()=>{if(filmeAtual)salvarProgresso()});
+  videoEl.addEventListener('ended',()=>{
+    if(!filmeAtual)return;
+    filmeAtual.progresso=0;
+    filmeAtual.duracao=videoEl.duration;
+    salvarFilme(filmeAtual);
+  });
+
+  async function salvarProgresso(){
+    if(!filmeAtual||!videoEl.duration)return;
+    filmeAtual.progresso=videoEl.currentTime;
+    filmeAtual.duracao=videoEl.duration;
+    filmeAtual.ultimoAcesso=Date.now();
+    await salvarFilme(filmeAtual);
+    const i=filmes.findIndex(x=>x.id===filmeAtual.id);
+    if(i>=0)filmes[i]={...filmeAtual};
+  }
+
+  /* ========================================================
+     LIKE
+     ======================================================== */
+  function chaveLocalCurtido(id){return `youflix_curtido_${id}`}
+
+  function atualizarLikeUI(){
+    if(!filmeAtual)return;
+    const curtido=localStorage.getItem(chaveLocalCurtido(filmeAtual.id))==='1';
+    const btn=document.getElementById('btnLike');
+    btn.classList.toggle('ativo',curtido);
+    document.getElementById('likeIcon').textContent=curtido?'❤️':'👍';
+    document.getElementById('likeCount').textContent=filmeAtual.curtidas||0;
+  }
+
+  async function toggleLike(){
+    if(!filmeAtual)return;
+    const chave=chaveLocalCurtido(filmeAtual.id);
+    const curtido=localStorage.getItem(chave)==='1';
+    const novo=!curtido;
+    localStorage.setItem(chave,novo?'1':'0');
+
+    if(estaCloud()){
+      const ref=db.collection('filmes').doc(filmeAtual.id);
+      try{
+        await ref.set({
+          curtidas:firebase.firestore.FieldValue.increment(novo?1:-1)
+        },{merge:true});
+      }catch(e){console.error(e);toast('❌ Erro ao curtir')}
+    }else{
+      filmeAtual.curtidas=Math.max(0,(filmeAtual.curtidas||0)+(novo?1:-1));
+      await salvarFilme(filmeAtual);
+      const i=filmes.findIndex(x=>x.id===filmeAtual.id);
+      if(i>=0)filmes[i]={...filmeAtual};
+    }
+    atualizarLikeUI();
+  }
+
+  function configurarLikes(){
+    if(unsubLikes){unsubLikes();unsubLikes=null}
+    if(!estaCloud()||!filmeAtual)return;
+
+    const ref=db.collection('filmes').doc(filmeAtual.id);
+    ref.get().then(d=>{
+      if(!d.exists)ref.set({curtidas:0,comentarios:0},{merge:true}).catch(()=>{});
+    }).catch(()=>{});
+
+    unsubLikes=ref.onSnapshot(doc=>{
+      if(doc.exists&&filmeAtual){
+        const c=doc.data().curtidas||0;
+        filmeAtual.curtidas=c;
+        document.getElementById('likeCount').textContent=c;
+      }
+    },err=>console.warn('like sync:',err));
+  }
+
+  /* ========================================================
+     INSCRIÇÃO
+     ======================================================== */
+  function getInscrito(){return localStorage.getItem('youflix_inscrito')==='1'}
+
+  function atualizarInscricaoUI(){
+    const inscrito=getInscrito();
+    const btn=document.getElementById('btnSub');
+    btn.textContent=inscrito?'✓ Inscrito':'Inscrever-se';
+    btn.classList.toggle('inscrito',inscrito);
+  }
+
+  async function toggleInscricao(){
+    const atual=getInscrito();
+    const novo=!atual;
+    localStorage.setItem('youflix_inscrito',novo?'1':'0');
+
+    if(estaCloud()){
+      try{
+        await db.collection('canais').doc('youflix').set({
+          inscritos:firebase.firestore.FieldValue.increment(novo?1:-1)
+        },{merge:true});
+      }catch(e){console.error(e)}
+    }
+    atualizarInscricaoUI();
+  }
+
+  function configurarInscritos(){
+    if(unsubCanal){unsubCanal();unsubCanal=null}
+    if(!estaCloud())return;
+
+    const ref=db.collection('canais').doc('youflix');
+    ref.get().then(d=>{
+      if(!d.exists)ref.set({inscritos:0},{merge:true}).catch(()=>{});
+    }).catch(()=>{});
+
+    unsubCanal=ref.onSnapshot(doc=>{
+      const c=doc.exists?(doc.data().inscritos||0):0;
+      document.getElementById('subCount').textContent=`${c.toLocaleString('pt-BR')} inscritos`;
+    },err=>console.warn('canal sync:',err));
+  }
+
+  /* ========================================================
+     COMENTÁRIOS
+     ======================================================== */
+  function configurarComentarios(){
+    const lista=document.getElementById('commentList');
+
+    if(unsubComents){unsubComents();unsubComents=null}
+
+    if(!estaCloud()){
+      renderizarComentariosLocal();
+      return;
+    }
+
+    const ref=db.collection('filmes').doc(filmeAtual.id).collection('comentarios');
+    unsubComents=ref.orderBy('criadoEm','desc').limit(200).onSnapshot(snap=>{
+      const comentarios=[];
+      snap.forEach(d=>comentarios.push({id:d.id,...d.data()}));
+      renderizarComentariosLista(comentarios);
+    },err=>{
+      console.warn('coment sync:',err);
+      renderizarComentariosLocal();
+    });
+  }
+
+  function renderizarComentariosLocal(){
+    const comentarios=(filmeAtual.comentarios||[]).slice().reverse();
+    renderizarComentariosLista(comentarios);
+  }
+
+  function renderizarComentariosLista(comentarios){
+    const lista=document.getElementById('commentList');
+    document.getElementById('commentCount').textContent=comentarios.length;
+
+    if(!comentarios.length){
+      lista.innerHTML='<p class="sem-coment">Nenhum comentário ainda. Seja o primeiro!</p>';
+      return;
+    }
+    lista.innerHTML=comentarios.map(c=>`
+      <div class="comentario">
+        <div class="coment-avatar">${(c.autor||'?')[0].toUpperCase()}</div>
+        <div class="coment-body">
+          <div class="coment-header">
+            <strong>${esc(c.autor||'Anônimo')}</strong>
+            <span>${tempoRelativo(c.criadoEm)}</span>
+          </div>
+          <p>${esc(c.texto)}</p>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function adicionarComentario(){
+    if(!filmeAtual)return;
+    const input=document.getElementById('commentInput');
+    const texto=input.value.trim();
+    if(!texto)return;
+
+    input.value='';
+
+    if(estaCloud()){
+      try{
+        await db.collection('filmes').doc(filmeAtual.id).collection('comentarios').add({
+          autor:'Você',
+          texto,
+          criadoEm:Date.now()
+        });
+        await db.collection('filmes').doc(filmeAtual.id).set({
+          comentarios:firebase.firestore.FieldValue.increment(1)
+        },{merge:true});
+      }catch(e){console.error(e);toast('❌ Erro ao comentar');input.value=texto}
+    }else{
+      filmeAtual.comentarios=filmeAtual.comentarios||[];
+      filmeAtual.comentarios.push({
+        id:Date.now().toString(),
+        autor:'Você',
+        texto,
+        criadoEm:Date.now()
+      });
+      await salvarFilme(filmeAtual);
+      const i=filmes.findIndex(x=>x.id===filmeAtual.id);
+      if(i>=0)filmes[i]={...filmeAtual};
+      renderizarComentariosLocal();
+    }
+  }
+
+  document.getElementById('commentInput').addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();adicionarComentario()}
+  });
+
+  /* ========================================================
+     UPLOAD + NOTIFICAÇÕES
+     ======================================================== */
+  function abrirUpload(){
+    document.getElementById('modalUpload').classList.add('aberto');
+    document.getElementById('uploadStatus').textContent='';
+  }
+  function fecharUpload(){
+    document.getElementById('modalUpload').classList.remove('aberto');
+    document.getElementById('formUpload').reset();
+  }
+
+  function gerarThumb(file){
+    return new Promise(resolve=>{
+      const v=document.createElement('video');v.preload='metadata';v.muted=true;v.playsInline=true;
+      v.style.cssText='position:fixed;opacity:0;pointer-events:none;width:1px;height:1px';
+      document.body.appendChild(v);
+      const url=URL.createObjectURL(file);v.src=url;
+      const limpar=()=>{URL.revokeObjectURL(url);v.remove()};
+      const timeout=setTimeout(()=>{limpar();resolve(null)},8000);
+      v.onloadedmetadata=()=>{v.currentTime=Math.min(1,(v.duration||2)*0.1)};
+      v.onseeked=()=>{
+        clearTimeout(timeout);
+        try{
+          const c=document.createElement('canvas');
+          c.width=320;c.height=Math.round(v.videoHeight*(320/v.videoWidth))||180;
+          c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+          c.toBlob(b=>{limpar();resolve(b)},'image/jpeg',0.7);
+        }catch(e){limpar();resolve(null)}
+      };
+      v.onerror=()=>{clearTimeout(timeout);limpar();resolve(null)};
+    });
+  }
+
+  async function pedirNotificacao(){
+    if(!('Notification' in window))return false;
+    if(Notification.permission==='granted')return true;
+    if(Notification.permission==='denied')return false;
+    try{
+      const p=await Notification.requestPermission();
+      return p==='granted';
+    }catch{return false}
+  }
+
+  function notificarUpload(titulo){
+    if(!('Notification' in window)||Notification.permission!=='granted')return;
+    try{
+      new Notification('🎬 Youflix',{
+        body:`Novo vídeo publicado: ${titulo}`,
+        tag:'youflix-upload',
+        requireInteraction:false
+      });
+    }catch(e){console.warn(e)}
+  }
+
+  document.getElementById('formUpload').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const form=e.target,status=document.getElementById('uploadStatus'),
+          prog=document.getElementById('prog'),bar=document.getElementById('progBar');
+    const file=form.video.files[0];if(!file)return;
+    const MB=file.size/(1024*1024);
+    if(MB>LIMITE_MB){status.textContent=`⚠️ Vídeo muito grande (${MB.toFixed(0)}MB). Limite: ${LIMITE_MB}MB.`;status.className='erro';return}
+
+    status.textContent='⏳ Processando...';status.className='';
+    prog.classList.add('ativo');bar.style.width='10%';
+
+    try{
+      const dur=await new Promise(res=>{
+        const v=document.createElement('video');v.preload='metadata';v.src=URL.createObjectURL(file);
+        v.onloadedmetadata=()=>{const d=v.duration;URL.revokeObjectURL(v.src);res(d)};
+        v.onerror=()=>res(0);
+        setTimeout(()=>res(0),5000);
+      });
+
+      const thumb=await gerarThumb(file);bar.style.width='40%';
+
+      const id=Date.now().toString()+Math.random().toString(36).slice(2,7);
+      const titulo=form.titulo.value.trim();
+
+      await salvarFilme({
+        id,titulo,
+        descricao:form.descricao.value.trim(),
+        categoria:form.categoria.value,
+        videoBlob:file,thumbBlob:thumb,
+        criadoEm:Date.now(),
+        duracao:dur||0,
+        progresso:0,
+        curtidas:0,
+        comentarios:[]
+      });
+
+      bar.style.width='100%';
+      status.textContent='✅ Vídeo salvo!';
+
+      const temPermissao=await pedirNotificacao();
+      if(temPermissao){
+        notificarUpload(titulo);
+      } else {
+        toast(`🎬 Vídeo publicado: ${titulo}`);
+      }
+
+      setTimeout(()=>{
+        fecharUpload();
+        prog.classList.remove('ativo');bar.style.width='0%';
+        carregar();
+      },800);
+    }catch(err){
+      console.error(err);
+      status.textContent='❌ '+(err.name==='QuotaExceededError'?'Sem espaço no aparelho':(err.message||'Falha ao salvar'));
+      status.className='erro';prog.classList.remove('ativo');
+    }
+  });
+
+  /* ========================================================
+     CONFIG — FIREBASE
+     ======================================================== */
+  function atualizarStatusConfig(){
+    const el=document.getElementById('configStatus');
+    if(estaCloud()){
+      el.className='config-status ok';
+      el.innerHTML='✅ <b>Sincronização em nuvem ativada</b><br>Curtidas, comentários e inscrições são globais.';
+    }else{
+      el.className='config-status warn';
+      el.innerHTML='⚠️ <b>Modo local</b><br>Dados salvos apenas neste aparelho. Configure abaixo para sincronizar entre todos os visitantes.';
+    }
+  }
+
+  function abrirConfig(){
+    const cfg=getConfig();
+    document.getElementById('configArea').value=cfg?JSON.stringify(cfg,null,2):'';
+    atualizarStatusConfig();
+    document.getElementById('modalConfig').classList.add('aberto');
+  }
+  function fecharConfig(){document.getElementById('modalConfig').classList.remove('aberto')}
+
+  function salvarConfig(){
+    const txt=document.getElementById('configArea').value.trim();
+    if(!txt){toast('⚠️ Cole a configuração primeiro');return}
+    try{
+      const obj=JSON.parse(txt);
+      if(!obj.apiKey||!obj.projectId){toast('⚠️ Configuração incompleta');return}
+      localStorage.setItem('youflix_fb',JSON.stringify(obj));
+      toast('✅ Configuração salva! Recarregando...');
+      setTimeout(()=>location.reload(),1200);
+    }catch(e){
+      toast('❌ JSON inválido');
+    }
+  }
+
+  function limparConfig(){
+    if(!confirm('Remover configuração do Firebase?'))return;
+    localStorage.removeItem('youflix_fb');
+    toast('🗑 Configuração removida');
+    setTimeout(()=>location.reload(),1000);
+  }
+
+  /* ========================================================
+     INICIALIZAÇÃO
+     ======================================================== */
+  async function carregar(){
+    filmes=await listarFilmes();
+    filmes.forEach(f=>{
+      if(!f.categoria)f.categoria='Geral';
+      if(!f.curtidas)f.curtidas=0;
+      if(!f.comentarios)f.comentarios=[];
+    });
+    render(filmes);
+    atualizarHero();
+  }
+
+  function atualizarHero(){
+    const h=document.getElementById('heroSub');
+    if(filmes.length){
+      h.textContent=`${filmes.length} vídeo${filmes.length>1?'s':''} na sua biblioteca.`;
+    }
+  }
+
+  async function init(){
+    const splash=document.getElementById('splash');
+
+    const esconderSplash=()=>{
+      splash.classList.add('oculto');
+      document.body.classList.add('pronto');
+      setTimeout(()=>splash.remove(),700);
+    };
+
+    const primeiraInteracao=()=>{
+      tocarTaDum();
+      document.removeEventListener('touchstart',primeiraInteracao);
+      document.removeEventListener('click',primeiraInteracao);
+    };
+    document.addEventListener('touchstart',primeiraInteracao,{once:true});
+    document.addEventListener('click',primeiraInteracao,{once:true});
+
+    setTimeout(esconderSplash,1800);
+
+    initFirebase();
+    configurarInscritos();
+
+ 
